@@ -1,0 +1,35 @@
+---
+import BlogCard from '@/components/BlogCard.astro'
+import Container from '@/components/Container.astro'
+import Link from '@/components/Link.astro'
+import { buttonVariants } from '@/components/ui/button'
+import Bento from '@/components/Bento.astro'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { SITE } from '@/consts'
+import Layout from '@/layouts/Layout.astro'
+import { getCollection } from 'astro:content'
+
+const blog = (await getCollection('blog'))
+  .filter((post) => !post.data.draft)
+  .sort((a, b) => b.data.date.valueOf() - a.data.date.valueOf())
+  .slice(0, SITE.NUM_POSTS_ON_HOMEPAGE)
+
+---
+
+
+<Layout title="Home" description={SITE.DESCRIPTION}>
+  <Container class="flex flex-col gap-y-6">
+   
+    <Bento />
+    
+    
+
+  </Container>
+</Layout>
+
