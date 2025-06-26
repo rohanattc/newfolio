@@ -2,7 +2,7 @@
 import Marquee from "./Marquee.astro"
 import Github from './Github.astro'
 import Carousel from './Carousel.astro'
-import Music from "./Music.astro"
+import Music from "./Music.tsx"
 
 import BlogCard from '@/components/BlogCard.astro'
 import Container from '@/components/Container.astro'
@@ -88,7 +88,7 @@ const blog = (await getCollection('blog'))
   <!-- music componeny -->
 
   <div class="col-start-1 col-span-7 md:col-span-2 md:row-span-2 md:row-start-8 bg-[#000000] border-[#FFFFFF]/20 border-2 rounded-lg p-4 flex items-center space-x-4">
-    <Music />
+    <Music client:load/>
 </div>
 
   <div class="col-span-7 col-start-1 md:col-span-2 md:row-span-2 md:col-start-3 md:row-start-8 bg-[#000000] border-[#FFFFFF]/20 border-2 rounded-lg">
