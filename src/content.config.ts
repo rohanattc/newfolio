@@ -30,7 +30,7 @@ const authors = defineCollection({
   schema: z.object({
     name: z.string(),
     pronouns: z.string().optional(),
-    avatar: z.string().url(),
+    avatar: z.string(),
     bio: z.string().optional(),
     mail: z.string().email().optional(),
     website: z.string().url().optional(),
@@ -46,10 +46,13 @@ const projects = defineCollection({
   schema: ({ image }) =>
     z.object({
       name: z.string(),
+      order: z.number().default(999),
       description: z.string(),
       tags: z.array(z.string()),
-      image: image(),
-      link: z.string().url(),
+      image: image().optional(),
+      role: z.string().optional(),
+      year: z.number().optional(),
+      status: z.string().optional(),
     }),
 })
 
