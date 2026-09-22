@@ -4,6 +4,7 @@ import ThemeToggle from '@/components/ThemeToggle.astro'
 import { NAV_LINKS, SITE } from '@/consts'
 import { getWorks } from '@/lib/works'
 import { getCollection } from 'astro:content'
+import { Icon } from 'astro-icon/components'
 
 const path = Astro.url.pathname
 
@@ -36,8 +37,8 @@ const isActive = (href: string) => {
       </a>
 
       <div class="flex items-center gap-1 sm:gap-3">
-      <nav aria-label="Primary">
-        <ul class="flex items-stretch">
+      <nav aria-label="Primary" class="hidden sm:block">
+        <ul class="relative flex items-stretch" data-nav-list>
           {
             NAV_LINKS.map((item) => {
               const active = isActive(item.href)
@@ -49,7 +50,7 @@ const isActive = (href: string) => {
                     class:list={[
                       'relative flex h-14 items-center gap-2 px-2.5 text-sm font-semibold capitalize no-underline transition-colors duration-200 max-[359px]:px-1.5 sm:px-4',
                       active
-                        ? 'text-primary after:absolute after:inset-x-2.5 after:bottom-0 after:h-0.5 after:bg-primary max-[359px]:after:inset-x-1.5 sm:after:inset-x-4'
+                        ? 'text-primary'
                         : 'text-muted-foreground hover:text-foreground',
                     ]}
                   >
@@ -64,10 +65,255 @@ const isActive = (href: string) => {
               )
             })
           }
+          <span
+            aria-hidden="true"
+            data-nav-indicator
+            class="pointer-events-none absolute bottom-0 left-0 h-0.5 bg-primary opacity-0"
+          ></span>
         </ul>
       </nav>
       <ThemeToggle />
+      <button
+        type="button"
+        data-nav-toggle
+        class="btn btn-outline inline-flex size-9 flex-shrink-0 !px-0 sm:hidden"
+        aria-label="Open menu"
+        aria-expanded="false"
+        aria-controls="mobile-nav-panel"
+      >
+        <Icon name="lucide:menu" class="size-4" data-icon="open" />
+        <Icon name="lucide:x" class="hidden size-4" data-icon="close" />
+      </button>
       </div>
     </div>
   </Container>
+
+  <div id="mobile-nav-panel" data-mobile-nav class="mobile-nav-panel sm:hidden" hidden>
+    <div class="mobile-nav-panel-inner">
+    <Container>
+      <nav aria-label="Mobile">
+        <ul class="divide-y divide-border py-2">
+          {
+            NAV_LINKS.map((item) => {
+              const active = isActive(item.href)
+              return (
+                <li>
+                  <a
+                    href={item.href}
+                    aria-current={active ? 'page' : undefined}
+                    class:list={[
+                      'row-link items-center justify-between !px-1 !py-3 text-sm font-semibold capitalize no-underline',
+                      active
+                        ? 'text-primary'
+                        : 'text-muted-foreground hover:text-foreground',
+                    ]}
+                  >
+                    <span>{item.label}</span>
+                    {counts[item.href] !== undefined && (
+                      <span class="meta rounded bg-secondary px-1.5 py-px text-foreground">
+                        {counts[item.href]}
+                      </span>
+                    )}
+                  </a>
+                </li>
+              )
+            })
+          }
+        </ul>
+      </nav>
+    </Container>
+    </div>
+  </div>
 </header>
+
+<noscript>
+  <style>
+    a[aria-current='page']::after {
+      content: '';
+      position: absolute;
+      inset: auto 0.625rem 0;
+      height: 2px;
+      background: hsl(var(--primary));
+    }
+    @media (min-width: 640px) {
+      a[aria-current='page']::after {
+        inset-inline: 1rem;
+      }
+    }
+    /* No JS to open the panel, so fall back to the always-visible horizontal nav. */
+    [data-nav-toggle],
+    #mobile-nav-panel {
+      display: none !important;
+    }
+    nav[aria-label='Primary'] {
+      display: block !important;
+    }
+  </style>
+</noscript>
+
+<script>
+  // The underline is one element that springs from the previous tab to the active one.
+  // Navigation re-renders the header, so the last pose is kept here between pages.
+  type Pose = { x: number; w: number }
+  let pose: Pose | null = null
+  let raf = 0
+
+  const STIFFNESS = { x: 420, w: 300 }
+  // Damping ratios of about 0.42 (position) and 0.5 (width): one clear overshoot, then rest.
+  const DAMPING = { x: 2 * 0.42 * Math.sqrt(420), w: 2 * 0.5 * Math.sqrt(300) }
+
+  function find() {
+    const list = document.querySelector<HTMLElement>('[data-nav-list]')
+    const el = list?.querySelector<HTMLElement>('[data-nav-indicator]')
+    const link = list?.querySelector<HTMLElement>('[aria-current="page"]')
+    return { list, el, link }
+  }
+
+  function measure(list: HTMLElement, link: HTMLElement): Pose {
+    const box = link.getBoundingClientRect()
+    const style = getComputedStyle(link)
+    const left = parseFloat(style.paddingLeft)
+    const right = parseFloat(style.paddingRight)
+    return {
+      x: box.left - list.getBoundingClientRect().left + left,
+      w: box.width - left - right,
+    }
+  }
+
+  const place = (el: HTMLElement, p: Pose) => {
+    el.style.transform = `translateX(${p.x.toFixed(2)}px)`
+    el.style.width = `${Math.max(p.w, 4).toFixed(2)}px`
+  }
+
+  function settle(el: HTMLElement, target: Pose) {
+    cancelAnimationFrame(raf)
+    pose = { ...target }
+    place(el, target)
+  }
+
+  // The target is measured every frame: the page is still settling (fonts, scrollbar) when the swap lands.
+  function spring(el: HTMLElement, from: Pose, link: HTMLElement, measureTarget: () => Pose) {
+    let { x, w } = from
+    let vx = 0
+    let vw = 0
+    let prev = performance.now()
+    const step = (now: number) => {
+      // A navigation can replace the header mid-spring; a detached link measures as NaN.
+      if (!link.isConnected) return
+      const to = measureTarget()
+      const dt = Math.max(0, Math.min((now - prev) / 1000, 1 / 30))
+      prev = now
+      // Two substeps keep the stiff spring stable at low frame rates.
+      for (let i = 0; i < 2; i++) {
+        vx += (-STIFFNESS.x * (x - to.x) - DAMPING.x * vx) * (dt / 2)
+        vw += (-STIFFNESS.w * (w - to.w) - DAMPING.w * vw) * (dt / 2)
+        x += vx * (dt / 2)
+        w += vw * (dt / 2)
+      }
+      const done =
+        Math.abs(x - to.x) < 0.1 &&
+        Math.abs(w - to.w) < 0.1 &&
+        Math.abs(vx) < 0.5 &&
+        Math.abs(vw) < 0.5
+      if (done) return settle(el, to)
+      pose = { x, w }
+      place(el, pose)
+      raf = requestAnimationFrame(step)
+    }
+    raf = requestAnimationFrame(step)
+  }
+
+  function initNavIndicator() {
+    cancelAnimationFrame(raf)
+    const { list, el, link } = find()
+    if (!list || !el) return
+    if (!link) {
+      pose = null
+      el.style.opacity = '0'
+      return
+    }
+    const target = measure(list, link)
+    el.style.opacity = '1'
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const from = pose
+    if (!from || !Number.isFinite(from.x) || !Number.isFinite(from.w) || reduce) {
+      return settle(el, target)
+    }
+    place(el, from)
+    spring(el, from, link, () => measure(list, link))
+  }
+
+  window.addEventListener('resize', () => {
+    const { list, el, link } = find()
+    if (list && el && link) settle(el, measure(list, link))
+  })
+  document.addEventListener('astro:page-load', initNavIndicator)
+
+  // Mobile hamburger: a small dropdown panel below the header, closed by
+  // default on every navigation. Elements are re-queried per call rather than
+  // captured in a closure, since the header (and its button/panel) is
+  // replaced on each Astro navigation but this module only loads once.
+  function findMobileNav() {
+    const button = document.querySelector<HTMLButtonElement>('[data-nav-toggle]')
+    const panel = document.querySelector<HTMLElement>('[data-mobile-nav]')
+    return { button, panel }
+  }
+
+  function isMobileNavOpen() {
+    return findMobileNav().button?.getAttribute('aria-expanded') === 'true'
+  }
+
+  function setMobileNavOpen(open: boolean) {
+    const { button, panel } = findMobileNav()
+    if (!button || !panel) return
+    button.setAttribute('aria-expanded', String(open))
+    button.setAttribute('aria-label', open ? 'Close menu' : 'Open menu')
+    panel.hidden = !open
+    button.querySelector('[data-icon="open"]')?.classList.toggle('hidden', open)
+    button.querySelector('[data-icon="close"]')?.classList.toggle('hidden', !open)
+  }
+
+  function initMobileNav() {
+    const { button, panel } = findMobileNav()
+    if (!button || !panel) return
+    setMobileNavOpen(false)
+    button.addEventListener('click', () => setMobileNavOpen(!isMobileNavOpen()))
+    panel.addEventListener('click', (event) => {
+      if ((event.target as HTMLElement).closest('a')) setMobileNavOpen(false)
+    })
+  }
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || !isMobileNavOpen()) return
+    setMobileNavOpen(false)
+    findMobileNav().button?.focus()
+  })
+
+  document.addEventListener('click', (event) => {
+    if (!isMobileNavOpen()) return
+    const { button, panel } = findMobileNav()
+    const target = event.target as Node
+    // The theme toggle sits beside the hamburger; switching theme with the
+    // dropdown open shouldn't close it, so the reveal plays with the menu
+    // still in place instead of the menu vanishing first.
+    const themeToggle = document.querySelector('[data-theme-toggle]')
+    if (
+      button?.contains(target) ||
+      panel?.contains(target) ||
+      themeToggle?.contains(target)
+    ) {
+      return
+    }
+    setMobileNavOpen(false)
+  })
+
+  // A rotate or resize past the breakpoint reveals the horizontal nav; don't
+  // leave the dropdown open underneath it.
+  window
+    .matchMedia('(min-width: 640px)')
+    .addEventListener('change', (event) => {
+      if (event.matches) setMobileNavOpen(false)
+    })
+
+  document.addEventListener('astro:page-load', initMobileNav)
+</script>
