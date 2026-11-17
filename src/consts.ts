@@ -31,7 +31,7 @@ export const PROFILE = {
   location: 'Bengaluru, India',
   status: 'Open to projects',
   resume:
-    'https://drive.google.com/file/d/1QfcVElzDJ-qdOv0ejH5nJWqQ3iS8SwLV/view?usp=drivesdk',
+    'https://drive.google.com/file/d/1QfcVElzDJ-qdOv0ejH5nJWqQ3iS8SwLV/view?usp=sharing',
 } as const
 
 export const INTERVIEW_MAILTO = `mailto:${SITE.EMAIL}?subject=${encodeURIComponent(
